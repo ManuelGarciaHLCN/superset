@@ -54,6 +54,7 @@ import {
 import { Icons } from '@superset-ui/core/components/Icons';
 import { useChartIds } from 'src/dashboard/util/charts/useChartIds';
 import { useChartLayoutItems } from 'src/dashboard/util/useChartLayoutItems';
+import { CHART_TYPE } from 'src/dashboard/util/componentTypes';
 import { FiltersOutOfScopeCollapsible } from '../FiltersOutOfScopeCollapsible';
 import { useFilterControlFactory } from '../useFilterControlFactory';
 import { FiltersDropdownContent } from '../FiltersDropdownContent';
@@ -63,6 +64,7 @@ import { useFilterOutlined } from '../useFilterOutlined';
 import { useChartsVerboseMaps } from '../utils';
 import GroupByFilterCard from '../../ChartCustomization/GroupByFilterCard';
 import { selectChartCustomizationItems } from '../../ChartCustomization/selectors';
+import DeckMultiLayersFilter from '../../DeckMultiLayersFilter/DeckMultiLayersFilter';
 
 type FilterControlsProps = {
   dataMaskSelected: DataMaskStateWithId;
@@ -136,6 +138,9 @@ const FilterControls: FC<FilterControlsProps> = ({
   const dataMask = useSelector<RootState, DataMaskStateWithId>(
     state => state.dataMask,
   );
+  const charts = useSelector<RootState, Record<number, any>>(
+    state => state.charts,
+  );
   const chartIds = useChartIds();
   const chartLayoutItems = useChartLayoutItems();
   const verboseMaps = useChartsVerboseMaps();
@@ -179,9 +184,26 @@ const FilterControls: FC<FilterControlsProps> = ({
   const dashboardHasTabs = useDashboardHasTabs();
   const showCollapsePanel = dashboardHasTabs && filtersWithValues.length > 0;
 
+  // Check if there are any deck_multi charts
+  const hasDeckMultiCharts = useMemo(() => {
+    return chartLayoutItems.some(item => {
+      if (item.type !== CHART_TYPE || !item.meta?.chartId) {
+        return false;
+      }
+      const chart = charts[item.meta.chartId];
+      return (
+        chart?.form_data?.viz_type === 'deck_multi' &&
+        chart?.form_data?.deck_slices &&
+        Array.isArray(chart.form_data.deck_slices) &&
+        chart.form_data.deck_slices.length > 0
+      );
+    });
+  }, [chartLayoutItems, charts]);
+
   const [sectionsOpen, setSectionsOpen] = useState({
     filters: true,
     chartCustomization: true,
+    deckMultiLayers: true,
   });
 
   const toggleSection = useCallback((section: keyof typeof sectionsOpen) => {
@@ -254,6 +276,49 @@ const FilterControls: FC<FilterControlsProps> = ({
           />
         )}
 
+        {hasDeckMultiCharts && (
+          <SectionContainer>
+            {!hideHeader && (
+              <SectionHeader
+                onClick={() => toggleSection('deckMultiLayers')}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleSection('deckMultiLayers');
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <Title
+                  level={5}
+                  style={{
+                    margin: 0,
+                    fontSize: theme.fontSize,
+                    fontWeight: theme.fontWeightNormal,
+                    color: theme.colorText,
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {t('Filter layers')}
+                </Title>
+                <StyledIcon
+                  iconSize="m"
+                  isOpen={sectionsOpen.deckMultiLayers}
+                />
+              </SectionHeader>
+            )}
+            {(hideHeader || sectionsOpen.deckMultiLayers) && (
+              <SectionContent>
+                <DeckMultiLayersFilter orientation="vertical" />
+              </SectionContent>
+            )}
+            {(hideHeader || sectionsOpen.deckMultiLayers) && (
+              <StyledDivider />
+            )}
+          </SectionContainer>
+        )}
+
         {chartCustomizationItems.length > 0 && (
           <SectionContainer>
             {!hideHeader && (
@@ -314,9 +379,11 @@ const FilterControls: FC<FilterControlsProps> = ({
       filtersOutOfScope,
       hasRequiredFirst,
       chartCustomizationItems,
+      hasDeckMultiCharts,
       sectionsOpen,
       toggleSection,
       hideHeader,
+      theme,
     ],
   );
 
@@ -356,6 +423,7 @@ const FilterControls: FC<FilterControlsProps> = ({
   );
 
   const items = useMemo(() => {
+    // hasDeckMultiCharts is defined above, before renderVerticalContent
     const crossFilters = selectedCrossFilters.map(c => ({
       // a combination of filter name and chart id to account
       // for multiple cross filters from the same chart in the future
@@ -420,19 +488,49 @@ const FilterControls: FC<FilterControlsProps> = ({
         ),
       }));
 
-    return [
-      ...chartCustomizations,
-      ...dividerItems,
-      ...crossFilters,
-      ...nativeFiltersInScope,
-    ];
+    // Add Deck Multi Layers Filter if there are deck_multi charts
+    const deckMultiLayersFilter = hasDeckMultiCharts ? (
+      <div
+        className="deck-multi-layers-filter-wrapper"
+        css={css`
+          flex-shrink: 0;
+        `}
+      >
+        <DeckMultiLayersFilter
+          orientation={
+            filterBarOrientation === FilterBarOrientation.Vertical
+              ? 'vertical'
+              : 'horizontal'
+          }
+        />
+      </div>
+    ) : null;
+
+    const items: Array<{ id: string; element: JSX.Element }> = [];
+    
+    if (deckMultiLayersFilter) {
+      items.push({
+        id: 'deck-multi-layers-filter',
+        element: deckMultiLayersFilter,
+      });
+    }
+    
+    items.push(...chartCustomizations);
+    items.push(...dividerItems);
+    items.push(...crossFilters);
+    items.push(...nativeFiltersInScope);
+    
+    return items;
   }, [
     filtersInScope,
     renderer,
     rendererCrossFilter,
     selectedCrossFilters,
     chartCustomizationItems,
+    chartLayoutItems,
+    charts,
     theme,
+    filterBarOrientation,
   ]);
 
   const renderHorizontalContent = useCallback(

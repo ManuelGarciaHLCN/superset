@@ -39,6 +39,7 @@ import { Icons } from '@superset-ui/core/components/Icons';
 import { EmptyState, Loading } from '@superset-ui/core/components';
 import { useChartLayoutItems } from 'src/dashboard/util/useChartLayoutItems';
 import { useChartIds } from 'src/dashboard/util/charts/useChartIds';
+import { CHART_TYPE } from 'src/dashboard/util/componentTypes';
 import { selectChartCustomizationItems } from '../ChartCustomization/selectors';
 import { getFilterBarTestId, useChartsVerboseMaps } from './utils';
 import { VerticalBarProps } from './types';
@@ -217,9 +218,29 @@ const VerticalFilterBar: FC<VerticalBarProps> = ({
 
   const hasOnlyOneSectionType = availableSectionTypes.length === 1;
 
+  const charts = useSelector<RootState, Record<number, any>>(
+    state => state.charts,
+  );
+
+  // Check if there are any deck_multi charts
+  const hasDeckMultiCharts = chartLayoutItems.some(item => {
+    if (item.type !== CHART_TYPE || !item.meta?.chartId) {
+      return false;
+    }
+    const chart = charts[item.meta.chartId];
+    return (
+      chart?.form_data?.viz_type === 'deck_multi' &&
+      chart?.form_data?.deck_slices &&
+      Array.isArray(chart.form_data.deck_slices) &&
+      chart.form_data.deck_slices.length > 0
+    );
+  });
+
   const filterControls = useMemo(() => {
     const hasFiltersOrCustomizations =
-      filterValues.length > 0 || chartCustomizationItems.length > 0;
+      filterValues.length > 0 ||
+      chartCustomizationItems.length > 0 ||
+      hasDeckMultiCharts;
 
     return hasFiltersOrCustomizations ? (
       <FilterControlsWrapper>
@@ -251,6 +272,9 @@ const VerticalFilterBar: FC<VerticalBarProps> = ({
     onSelectionChange,
     chartCustomizationItems.length,
     hasOnlyOneSectionType,
+    hasDeckMultiCharts,
+    chartLayoutItems,
+    charts,
   ]);
 
   return (

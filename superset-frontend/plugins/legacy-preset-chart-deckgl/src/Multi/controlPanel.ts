@@ -58,6 +58,38 @@ export default {
           },
           null,
         ],
+        [
+          {
+            name: 'visible_layers',
+            config: {
+              type: 'SelectControl',
+              multi: true,
+              label: t('Visible Layers'),
+              default: [],
+              description: t(
+                'Select which layers to display. Leave empty to show all layers.',
+              ),
+              mapStateToProps: ({ controls }) => {
+                const deckSlices = controls?.deck_slices?.value || [];
+                if (!Array.isArray(deckSlices) || deckSlices.length === 0) {
+                  return { choices: [] };
+                }
+                // Create choices based on deck_slices indices
+                const choices = deckSlices.map((sliceId: number, index: number) => [
+                  index,
+                  t('Layer %s', index + 1),
+                ]);
+                return { choices };
+              },
+              visibility: ({ controls }) => {
+                const deckSlices = controls?.deck_slices?.value || [];
+                return Array.isArray(deckSlices) && deckSlices.length > 0;
+              },
+              renderTrigger: true,
+            },
+          },
+          null,
+        ],
       ],
     },
     {

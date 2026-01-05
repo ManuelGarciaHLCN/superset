@@ -540,6 +540,8 @@ export default function getFormDataWithExtraFilters({
   }
 
   const groupByState: Record<string, { selectedValues: string[] }> = {};
+  const deckMultiLayersState: Record<string, number[]> = {};
+  
   Object.entries(dataMask).forEach(([key, mask]) => {
     if (key.startsWith('chart_customization_')) {
       const selectedValues = mask.filterState?.value;
@@ -547,7 +549,29 @@ export default function getFormDataWithExtraFilters({
         groupByState[key] = { selectedValues };
       }
     }
+    // Handle deck_multi layers filter from dashboard
+    if (key.startsWith('deck_multi_layers_')) {
+      const selectedLayers = mask.filterState?.value;
+      if (Array.isArray(selectedLayers)) {
+        // Extract chart ID from key (format: deck_multi_layers_<chartId>)
+        const chartId = key.replace('deck_multi_layers_', '');
+        deckMultiLayersState[chartId] = selectedLayers;
+      }
+    }
   });
+  
+  // Add visible_layers to extra_form_data for deck_multi charts
+  if (isDeckMultiChart && deckMultiLayersState[chart.id.toString()]) {
+    const visibleLayers = deckMultiLayersState[chart.id.toString()];
+    if (!extraData.extra_form_data) {
+      extraData.extra_form_data = {};
+    }
+    // Use custom_form_data for custom properties
+    if (!extraData.extra_form_data.custom_form_data) {
+      extraData.extra_form_data.custom_form_data = {};
+    }
+    extraData.extra_form_data.custom_form_data.visible_layers = visibleLayers;
+  }
 
   const groupByFormData = processGroupByCustomizations(
     chartCustomizationItems || [],

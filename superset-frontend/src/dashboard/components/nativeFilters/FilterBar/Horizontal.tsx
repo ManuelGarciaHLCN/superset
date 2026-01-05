@@ -32,6 +32,7 @@ import FilterBarSettings from './FilterBarSettings';
 import crossFiltersSelector from './CrossFilters/selectors';
 import { selectChartCustomizationItems } from '../ChartCustomization/selectors';
 import { ChartCustomizationItem } from '../ChartCustomization/types';
+import { CHART_TYPE } from 'src/dashboard/util/componentTypes';
 
 const HorizontalBar = styled.div`
   ${({ theme }) => `
@@ -93,15 +94,34 @@ const HorizontalFilterBar: FC<HorizontalBarProps> = ({
     [chartIds, chartLayoutItems, dataMask, verboseMaps],
   );
 
+  const charts = useSelector<RootState, Record<number, any>>(
+    state => state.charts,
+  );
+
   const chartCustomizationItems = useSelector<
     RootState,
     ChartCustomizationItem[]
   >(selectChartCustomizationItems);
 
+  // Check if there are any deck_multi charts
+  const hasDeckMultiCharts = chartLayoutItems.some(item => {
+    if (item.type !== CHART_TYPE || !item.meta?.chartId) {
+      return false;
+    }
+    const chart = charts[item.meta.chartId];
+    return (
+      chart?.form_data?.viz_type === 'deck_multi' &&
+      chart?.form_data?.deck_slices &&
+      Array.isArray(chart.form_data.deck_slices) &&
+      chart.form_data.deck_slices.length > 0
+    );
+  });
+
   const hasFilters =
     filterValues.length > 0 ||
     selectedCrossFilters.length > 0 ||
-    chartCustomizationItems.length > 0;
+    chartCustomizationItems.length > 0 ||
+    hasDeckMultiCharts;
 
   return (
     <HorizontalBar {...getFilterBarTestId()}>

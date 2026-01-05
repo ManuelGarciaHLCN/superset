@@ -19,7 +19,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isEqual } from 'lodash';
 import {
   AdhocFilter,
@@ -257,8 +257,8 @@ const DeckMulti = (props: DeckMultiProps) => {
         SupersetClient.get({ endpoint: url })
           .then(({ json }) => {
             const layer = createLayerFromData(subsliceCopy, json);
-            setSubSlicesLayers(subSlicesLayers => ({
-              ...subSlicesLayers,
+            setSubSlicesLayers((prevSubSlicesLayers: Record<number, Layer>) => ({
+              ...prevSubSlicesLayers,
               [subsliceCopy.slice_id]: layer,
             }));
           })
@@ -292,6 +292,7 @@ const DeckMulti = (props: DeckMultiProps) => {
   );
 
   const prevDeckSlices = usePrevious(props.formData.deck_slices);
+  
   useEffect(() => {
     const { formData, payload } = props;
     const hasChanges = !isEqual(prevDeckSlices, formData.deck_slices);
@@ -301,14 +302,63 @@ const DeckMulti = (props: DeckMultiProps) => {
   }, [loadLayers, prevDeckSlices, props]);
 
   const { payload, formData, setControlValue, height, width } = props;
-  const layers = Object.values(subSlicesLayers);
+  
+  // Filter layers based on visible_layers selection
+  // Can come from control panel (formData.visible_layers) or from dashboard filter (extra_form_data.custom_form_data)
+  const filteredLayers = useMemo(() => {
+    const allLayers = Object.values(subSlicesLayers);
+    
+    // Check for visible_layers in extra_form_data.custom_form_data (from dashboard filter) first
+    const extraFormData = formData.extra_form_data || {};
+    const dashboardVisibleLayers =
+      extraFormData.custom_form_data?.visible_layers;
+    const controlPanelVisibleLayers = formData.visible_layers;
+    
+    // Use dashboard filter if available, otherwise use control panel setting
+    const visibleLayers = ensureIsArray(
+      dashboardVisibleLayers !== undefined
+        ? dashboardVisibleLayers
+        : controlPanelVisibleLayers,
+    );
+    
+    // If no visible_layers specified or empty, show all layers
+    if (!visibleLayers || visibleLayers.length === 0) {
+      return allLayers;
+    }
+    
+    // Get deck_slices to map layer indices to slice_ids
+    const deckSlices = ensureIsArray(formData.deck_slices);
+    if (deckSlices.length === 0) {
+      return allLayers;
+    }
+    
+    // Map visible layer indices to slice_ids
+    const visibleSliceIds = visibleLayers
+      .map((layerIndex: number) => {
+        if (layerIndex >= 0 && layerIndex < deckSlices.length) {
+          return deckSlices[layerIndex];
+        }
+        return null;
+      })
+      .filter(isDefined);
+    
+    // Filter layers: only include layers whose slice_id is in visibleSliceIds
+    return Object.entries(subSlicesLayers)
+      .filter(([sliceId]) => visibleSliceIds.includes(Number(sliceId)))
+      .map(([, layer]) => layer);
+  }, [
+    subSlicesLayers,
+    formData.visible_layers,
+    formData.extra_form_data,
+    formData.deck_slices,
+  ]);
 
   return (
     <DeckGLContainerStyledWrapper
       ref={containerRef}
       mapboxApiAccessToken={payload.data.mapboxApiKey}
       viewport={viewport}
-      layers={layers}
+      layers={filteredLayers}
       mapStyle={formData.mapbox_style}
       setControlValue={setControlValue}
       onViewportChange={setViewport}
